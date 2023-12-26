@@ -62,8 +62,6 @@ class MainActivity : AppCompatActivity() {
         checkPermission()
     }
 
-    external fun stringFromJNI(): String
-
     companion object {
         init {
             System.loadLibrary("newplayer")

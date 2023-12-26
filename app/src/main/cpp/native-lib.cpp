@@ -15,7 +15,6 @@ jint JNI_OnLoad(JavaVM *vm, void *args) {
     return JNI_VERSION_1_6;
 }
 
-
 // 函数指针的实现 实现渲染画面
 void renderFrame(uint8_t *src_data, int width, int height, int src_linesize) {
     pthread_mutex_lock(&mutex);

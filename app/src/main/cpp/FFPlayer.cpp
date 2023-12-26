@@ -1,6 +1,5 @@
 #include "include/FFPlayer.h"
 
-
 // 构造方法
 FFPlayer::FFPlayer(const char *data_source, JNICallbakcHelper *helper) {
 
@@ -37,8 +36,8 @@ void FFPlayer::setRenderCallback(RenderCallback renderCallback_) {
 
 void FFPlayer::stop_streaming(FFPlayer *derryPlayer) {
 
-    if (this->isStreaming) {
-        this->isStreaming = false;
+    if (isStreaming) {
+        isStreaming = false;
     }
 
     if (pid_prepare) {
@@ -212,8 +211,6 @@ void FFPlayer::get_media_info() { // 属于 子线程了 并且 拥有  DerryPla
                 continue;
             }
 
-            setRenderCallback(renderCallback);
-
         }
     } // for end
 
@@ -223,7 +220,6 @@ void FFPlayer::get_media_info() { // 属于 子线程了 并且 拥有  DerryPla
 
     LOGD("Prepare done");
 }
-
 
 // 1.把队列里面的压缩包（AVPacket *）取出来，然后解码成（AVFrame *）原始包 ----> 保存队列【真正干活的就是他】
 void FFPlayer::video_decode() {
@@ -272,77 +268,13 @@ void FFPlayer::video_decode() {
             LOGE("ERROR :%d", ret);
             break; // 出错误了
         }
-        // LOGD("Insert into que");
+
+        // LOGD("Insert into que frames.size():%d", frames.size());
         if (frames.size() < 10) {
             frames.insertToQueue(frame);
         } else {
             av_frame_free(&frame);
         }
-
-        if (pkt != nullptr) {
-            // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
-            av_packet_unref(pkt); // 减1 = 0 释放成员指向的堆区
-            releaseAVPacket(&pkt); // 释放AVPacket * 本身的堆区空间
-        }
-    }
-
-    while (0) {
-
-        // LOGD("frames.size() :%d", frames.size());
-        // 2.1 内存泄漏点
-        if (frames.size() > 10) {
-            av_usleep(10 * 1000); // 单位：microseconds 微妙 10毫秒
-            continue;
-        }
-        LOGD("0. 准备取一个压缩包");
-        int ret = packets.getQueueAndDel(pkt); // 阻塞式函数 取出刚刚DerryPlayer中加入的pkt
-        if (!ret) { // ret == 0
-            av_usleep(10 * 1000);
-            LOGD("Packet list is empty");
-            continue; // 哪怕是没有成功，也要继续（假设：你生产太慢(压缩包加入队列)，我消费就等一下你）
-        }
-
-        LOGD("1. 取出一个压缩包，准备解码");
-        ret = avcodec_send_packet(codecContext, pkt); // 第一步：把我们的 压缩包 AVPack发送给 FFmpeg缓存区
-
-        // FFmpeg源码内部 缓存了一份pkt副本，所以我才敢大胆的释放
-        // releaseAVPacket(&pkt); // 不是说不释放，而是放到后面去
-
-        if (ret) { // r != 0
-            break; // avcodec_send_packet 出现了错误，结束循环
-        }
-
-        LOGD("2. 解码一个压缩包，准备播放 :%d", packets.size());
-        // 第二步：读取 FFmpeg缓存区 A里面的 原始包 ，有可能读不到，为什么？ 内部缓冲区 会 运作过程比较慢
-        AVFrame *frame = av_frame_alloc();
-        ret = avcodec_receive_frame(codecContext, frame);
-        if (ret == AVERROR(EAGAIN)) {
-            // B帧  B帧参考前面成功  B帧参考后面失败   可能是P帧没有出来，再拿一次就行了
-            LOGI("avcodec_receive_frame failed ret:%d", ret);
-            av_frame_free(&frame); // 释放frame
-            if (pkt != nullptr) {
-                // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
-                av_packet_unref(pkt); // 减1 = 0 释放成员指向的堆区
-                releaseAVPacket(&pkt); // 释放AVPacket * 本身的堆区空间
-            }
-
-            LOGD("packet size:%d", packets.size());
-            continue;
-        } else if (ret != 0) {
-            if (frame) {
-                releaseAVFrame(&frame);
-            }
-            if (pkt != nullptr) {
-                // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
-                av_packet_unref(pkt); // 减1 = 0 释放成员指向的堆区
-                releaseAVPacket(&pkt); // 释放AVPacket * 本身的堆区空间
-            }
-            LOGE("ERROR :%d", ret);
-            break; // 出错误了
-        }
-
-        frames.insertToQueue(frame);
-        LOGD("Frame insert, size now:%d", frames.size());
 
         if (pkt != nullptr) {
             // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
@@ -362,22 +294,62 @@ void FFPlayer::video_decode() {
 
 void FFPlayer::video_play() {
     AVFrame *frame = nullptr;
+    uint8_t *dst_data[4];   // RGBA
+    int dst_line_size[4];    // RGBA
+
+    int ret = av_image_alloc(dst_data, dst_line_size,
+                             codecContext->width, codecContext->height,
+                             AV_PIX_FMT_RGBA, 1);
+    if (ret < 0) {
+        LOGE("av_image_alloc failed");
+        return;
+    }
+
+    // yuv -> rgba
+    SwsContext *sws_ctx = sws_getContext(
+            // 下面是输入环节
+            codecContext->width,
+            codecContext->height,
+            codecContext->pix_fmt, // 自动获取 xxx.mp4 的像素格式  AV_PIX_FMT_YUV420P // 写死的
+
+            // 下面是输出环节
+            codecContext->width,
+            codecContext->height,
+            AV_PIX_FMT_RGBA,
+            SWS_BILINEAR, NULL, NULL, NULL);
+
     while (isStreaming) {
 
-        int ret = frames.getQueueAndDel(frame);
+        ret = frames.getQueueAndDel(frame);
         if (!ret) { // ret == 0
             av_usleep(10 * 1000);
             continue; // 哪怕是没有成功，也要继续（假设：你生产太慢(原始包加入队列)，我消费就等一下你）
         }
+
+        sws_scale(sws_ctx,
+                // 下面是输入环节 YUV的数据
+                  frame->data, frame->linesize,
+                  0, codecContext->height,
+
+                  // 下面是 输出环节 成果：RGBA数据 Android SurfaceView播放画面
+                  dst_data,
+                  dst_line_size
+        );
+
+        // LOGD("Trans to rgba finish");
+        renderCallback(dst_data[0], codecContext->width, codecContext->height, dst_line_size[0]);
+
         if (frame) {
             av_frame_unref(frame); // 减1 = 0 释放成员指向的堆区
             releaseAVFrame(&frame); // 释放AVFrame * 本身的堆区空间
         }
     }
-    if (frame) {
-        av_frame_unref(frame); // 减1 = 0 释放成员指向的堆区
-        releaseAVFrame(&frame); // 释放AVFrame * 本身的堆区空间
-    }
+    // isPlaying = false;
+    LOGD("video play end 1");
+    av_freep(&dst_data[0]);
+    LOGD("video play end 2");
+    sws_freeContext(sws_ctx); // free(sws_ctx); FFmpeg必须使用人家的函数释放，直接崩溃
+    LOGD("video play end");
 }
 
 void *task_video_decode(void *args) {

@@ -11,6 +11,9 @@ extern "C" { // ffmpeg是纯c写的，必须采用c的编译方式，否则奔�
 #include <libavutil/time.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/common.h>
+#include <libavutil/avutil.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
 };
 
 typedef void(*RenderCallback)(uint8_t *, int, int, int); // 函数指针声明定义  // TODO 第三节课新增

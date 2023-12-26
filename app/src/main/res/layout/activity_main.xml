@@ -20,7 +20,7 @@
     <!-- 这里不是有大小吗？为什么还要设置， View的物理大小 -->
     <SurfaceView
         android:id="@+id/surfaceView"
-        android:layout_width="match_parent"
-        android:layout_height="400dp" />
+        android:layout_width="960dp"
+        android:layout_height="520dp" />
 
 </LinearLayout>

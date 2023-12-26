@@ -22,8 +22,8 @@ class FFPlayerKT : SurfaceHolder.Callback, LifecycleObserver {
 
     override fun surfaceCreated(p0: SurfaceHolder) {
     }
-
-    override fun surfaceChanged(p0: SurfaceHolder, p1: Int, p2: Int, p3: Int) {
+    override fun surfaceChanged(surfaceHolder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        setSurfaceNative(surfaceHolder.surface, nativePlayerObj!!)
     }
 
     override fun surfaceDestroyed(p0: SurfaceHolder) {
