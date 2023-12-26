@@ -240,12 +240,44 @@ void FFPlayer::video_decode() {
             av_usleep(10 * 1000);
             continue;
         }
-
+        // LOGD("Get packet from queue");
         packets.getQueueAndDel(pkt);
-        //        int ret = packets.getQueueAndDel(pkt); // 阻塞式函数 取出刚刚DerryPlayer中加入的pkt
-        //        if (!ret) { // ret == 0
-        //            continue; // 哪怕是没有成功，也要继续（假设：你生产太慢(压缩包加入队列)，我消费就等一下你）
-        //        }
+        int ret = avcodec_send_packet(codecContext, pkt); // 第一步：把我们的 压缩包 AVPack发送给 FFmpeg缓存区
+        if (ret) { // r != 0
+            break; // avcodec_send_packet 出现了错误，结束循环
+        }
+        AVFrame *frame = av_frame_alloc();
+        ret = avcodec_receive_frame(codecContext, frame);
+        if (ret == AVERROR(EAGAIN)) {
+            // B帧  B帧参考前面成功  B帧参考后面失败   可能是P帧没有出来，再拿一次就行了
+            LOGI("avcodec_receive_frame failed ret:%d", ret);
+            av_frame_free(&frame); // 释放frame
+            if (pkt != nullptr) {
+                // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
+                av_packet_unref(pkt); // 减1 = 0 释放成员指向的堆区
+                releaseAVPacket(&pkt); // 释放AVPacket * 本身的堆区空间
+            }
+
+            // LOGD("packet size:%d", packets.size());
+            continue;
+        } else if (ret != 0) {
+            if (frame) {
+                releaseAVFrame(&frame);
+            }
+            if (pkt != nullptr) {
+                // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
+                av_packet_unref(pkt); // 减1 = 0 释放成员指向的堆区
+                releaseAVPacket(&pkt); // 释放AVPacket * 本身的堆区空间
+            }
+            LOGE("ERROR :%d", ret);
+            break; // 出错误了
+        }
+        // LOGD("Insert into que");
+        if (frames.size() < 10) {
+            frames.insertToQueue(frame);
+        } else {
+            av_frame_free(&frame);
+        }
 
         if (pkt != nullptr) {
             // 安心释放pkt本身空间释放 和 pkt成员指向的空间释放
@@ -449,5 +481,5 @@ void FFPlayer::start_streaming() {
     // 把 音频 视频 压缩包  加入队列里面去
     // 创建子线程 pthread
     pthread_create(&pid_start, nullptr, start_stream_thread, this); // this == DerryPlayer的实例
-    
+
 }
