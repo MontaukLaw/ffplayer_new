@@ -29,7 +29,8 @@ class MainActivity : AppCompatActivity() {
 
         player = FFPlayerKT()
         lifecycle.addObserver(player!!) // MainActivity被观察者 与 BKPlayer观察者 建立绑定关系
-        player?.setDataSource("rtsp://192.168.3.204:8554/stream")
+        player?.setDataSource("rtsp://192.168.1.7:554/stream1")
+        // player?.setDataSource("rtsp://192.168.3.204:8554/stream")
 
         player?.setSurfaceView(surfaceView!!)
 

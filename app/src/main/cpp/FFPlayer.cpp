@@ -45,16 +45,19 @@ void FFPlayer::stop_streaming(FFPlayer *derryPlayer) {
         LOGD("Join pid_prepare");
         pthread_join(pid_prepare, nullptr);
     }
+
     if (pid_video_decode) {
         LOGD("Join pid_prepare");
-        pthread_join(pid_start, nullptr);
+        pthread_join(pid_video_decode, nullptr);
     }
 
     if (pid_start) {
+        LOGD("Join pid_start");
         pthread_join(pid_start, nullptr);
     }
 
     if (pid_video_play) {
+        LOGD("Join pid_video_play");
         pthread_join(pid_video_play, nullptr);
     }
 
@@ -72,7 +75,6 @@ void FFPlayer::stop_streaming(FFPlayer *derryPlayer) {
 
     DELETE(derryPlayer);
 }
-
 
 void FFPlayer::get_stream_process() {
     // 一股脑 把 AVPacket * 丢到 队列里面去  不区分 音频 视频
